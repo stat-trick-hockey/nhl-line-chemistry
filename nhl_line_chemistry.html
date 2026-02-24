@@ -950,8 +950,8 @@ async function runAnalysis() {
     // attach player names
     currentData = metrics.map(r => ({
       ...r,
-      name1: roster[r.p1]?.name || `#${r.p1}`,
-      name2: roster[r.p2]?.name || `#${r.p2}`,
+      name1: roster[String(r.p1)]?.name || `#${r.p1}`,
+      name2: roster[String(r.p2)]?.name || `#${r.p2}`,
     }));
 
     gamesProcessed = processed;

@@ -118,6 +118,7 @@ def process_game(game_id):
             period = s.get("period", 1)
             if not pid or period > 4:
                 continue
+            pid = int(pid)  # force integer
             off   = period_offset(period)
             start = off + mmss_to_sec(s.get("startTime", "0:00"))
             end   = off + mmss_to_sec(s.get("endTime",   "0:00"))
@@ -212,7 +213,17 @@ def process_game(game_id):
                             if is_for: s["cf"] += 1
                             if is_agn: s["ca"] += 1
 
-        return jsonify({"pairs": list(pairs.values()), "homeId": home_id, "awayId": away_id, "players": game_players})
+        return jsonify({
+            "pairs":        list(pairs.values()),
+            "homeId":       home_id,
+            "awayId":       away_id,
+            "players":      game_players,
+            "debug": {
+                "interval_player_count": len(intervals),
+                "play_count":            len(pbp.get("plays", [])),
+                "pair_count":            len(pairs),
+            }
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

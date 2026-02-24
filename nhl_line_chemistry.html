@@ -675,7 +675,7 @@ async function parseGame(gameId, goalieIds) {
     const key = `${p.p1}_${p.p2}`;
     pairs[key] = p;
   }
-  return { pairs, players: data.players || {} };
+  return { pairs, players: data.players || {}, debug: data.debug };
 }
 
 // ── Aggregate ──────────────────────────────────────────────────────────────
@@ -839,7 +839,7 @@ function buildTableHTML() {
       <input class="filter-input" id="searchInput" placeholder="Filter by player name..." oninput="renderTable()">
       <div class="toi-filter">
         Min TOI (min)
-        <input type="number" class="filter-input" id="minToi" value="10" min="0" style="width:64px" oninput="renderTable()">
+        <input type="number" class="filter-input" id="minToi" value="1" min="0" style="width:64px" oninput="renderTable()">
       </div>
     </div>
     <div class="table-wrap">

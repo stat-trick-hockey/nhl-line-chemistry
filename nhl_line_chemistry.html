@@ -670,6 +670,9 @@ async function parseGame(gameId, goalieIds) {
   // Convert array of pairs back to keyed object for mergePairs()
   const pairs = {};
   for (const p of (data.pairs || [])) {
+    // p1/p2 are strings from server, ensure consistent keys
+    p.p1 = String(p.p1);
+    p.p2 = String(p.p2);
     const key = `${p.p1}_${p.p2}`;
     pairs[key] = p;
   }
@@ -913,7 +916,7 @@ async function runAnalysis() {
     setStatus("loading", "LOADING", "Fetching roster...");
     const roster = await getRoster(team);
     const goalieIds = new Set(
-      Object.entries(roster).filter(([,v]) => v.pos === "G").map(([k]) => +k)
+      Object.entries(roster).filter(([,v]) => v.pos === "G").map(([k]) => String(k))
     );
 
     // 2. game IDs
@@ -948,6 +951,14 @@ async function runAnalysis() {
     const metrics = computeMetrics(totals);
 
     // attach player names
+    // Debug: log a sample to verify roster keys match pair IDs
+    const samplePair = metrics[0];
+    if (samplePair) {
+      console.log("Sample p1:", samplePair.p1, typeof samplePair.p1,
+                  "-> roster hit:", roster[String(samplePair.p1)]);
+      console.log("Roster keys sample:", Object.keys(roster).slice(0,3));
+    }
+
     currentData = metrics.map(r => ({
       ...r,
       name1: roster[String(r.p1)]?.name || `#${r.p1}`,

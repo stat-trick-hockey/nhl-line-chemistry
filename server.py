@@ -173,7 +173,7 @@ def process_game(game_id):
 
                         if key not in pairs:
                             pairs[key] = {
-                                "p1": p1, "p2": p2, "teamId": team_id,
+                                "p1": str(p1), "p2": str(p2), "teamId": team_id,
                                 "toi": 0,
                                 "gf": 0, "ga": 0,
                                 "sf": 0, "sa": 0,

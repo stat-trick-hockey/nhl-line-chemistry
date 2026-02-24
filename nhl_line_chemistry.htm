@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHL Line Chemistry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=JetBrains+Mono:wght@400;600&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ice:      #e8f4f8;
+    --blue:     #0057b8;
+    --blue-mid: #0077cc;
+    --cyan:     #00c8f0;
+    --dark:     #070d14;
+    --panel:    #0d1a26;
+    --panel2:   #111f2e;
+    --border:   #1a3048;
+    --text:     #c8dce8;
+    --dim:      #5a7a8a;
+    --red:      #e84040;
+    --green:    #22cc88;
+    --gold:     #f0b030;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--dark);
+    color: var(--text);
+    font-family: 'Barlow', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* rink ice texture background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,120,200,0.04) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,120,200,0.04) 40px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 20px 32px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: rgba(7,13,20,0.95);
+    backdrop-filter: blur(8px);
+  }
+
+  .logo-rink {
+    width: 40px; height: 28px;
+    border: 2px solid var(--cyan);
+    border-radius: 40%;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .logo-rink::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid var(--cyan);
+  }
+
+  h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ice);
+    line-height: 1;
+  }
+  h1 span { color: var(--cyan); }
+
+  .header-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+
+  /* ── CONTROLS BAR ── */
+  .controls {
+    position: relative;
+    z-index: 10;
+    padding: 14px 32px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  select, input[type="number"] {
+    background: var(--dark);
+    border: 1px solid var(--border);
+    color: var(--ice);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 7px 10px;
+    border-radius: 3px;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  select:focus, input:focus { border-color: var(--cyan); }
+  select { min-width: 90px; cursor: pointer; }
+  input[type="number"] { width: 80px; }
+
+  .btn {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 20px;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    align-self: flex-end;
+  }
+
+  .btn-primary {
+    background: var(--cyan);
+    color: var(--dark);
+  }
+  .btn-primary:hover { background: #40d8f8; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { background: var(--border); color: var(--dim); cursor: not-allowed; transform: none; }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+  }
+  .btn-secondary:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  .sort-group {
+    display: flex;
+    gap: 6px;
+    align-self: flex-end;
+  }
+  .sort-btn {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sort-btn.active {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: white;
+  }
+  .sort-btn:hover:not(.active) { border-color: var(--cyan); color: var(--cyan); }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    position: relative;
+    z-index: 1;
+    padding: 24px 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  /* ── STATUS BAR ── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    min-height: 32px;
+  }
+
+  .status-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+  .status-idle    { border-color: var(--border); color: var(--dim); }
+  .status-loading { border-color: var(--gold);   color: var(--gold); animation: pulse 1s infinite; }
+  .status-done    { border-color: var(--green);  color: var(--green); }
+  .status-error   { border-color: var(--red);    color: var(--red); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .status-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  /* ── PROGRESS ── */
+  .progress-wrap {
+    display: none;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+  .progress-wrap.visible { display: block; }
+  .progress-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--blue), var(--cyan));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+
+  /* ── SUMMARY CARDS ── */
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .card-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+  .card-value {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--ice);
+    line-height: 1;
+  }
+  .card-value.cyan  { color: var(--cyan); }
+  .card-value.green { color: var(--green); }
+  .card-value.gold  { color: var(--gold); }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .table-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .table-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ice);
+  }
+  .table-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+  }
+  thead th:hover { color: var(--cyan); }
+  thead th.sort-asc::after  { content: ' ↑'; color: var(--cyan); }
+  thead th.sort-desc::after { content: ' ↓'; color: var(--cyan); }
+  thead th.num { text-align: right; }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(26,48,72,0.5);
+    transition: background 0.1s;
+    animation: rowIn 0.3s ease both;
+  }
+  tbody tr:hover { background: var(--panel2); }
+  tbody tr:last-child { border-bottom: none; }
+
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  td {
+    padding: 11px 14px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .td-rank {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--dim);
+    width: 36px;
+  }
+
+  .td-players {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ice);
+    min-width: 240px;
+  }
+  .td-players .sep { color: var(--dim); font-weight: 400; margin: 0 6px; }
+
+  .td-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    text-align: right;
+    color: var(--text);
+  }
+
+  .td-bar-cell {
+    min-width: 120px;
+    padding-right: 20px;
+  }
+
+  .bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+  .bar-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    min-width: 36px;
+    text-align: right;
+  }
+
+  .gd-positive { color: var(--green); }
+  .gd-negative { color: var(--red); }
+  .gd-neutral  { color: var(--dim); }
+
+  .badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 2px 5px;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .badge-top { background: rgba(240,176,48,0.15); border: 1px solid rgba(240,176,48,0.3); color: var(--gold); }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    padding: 80px 32px;
+    text-align: center;
+  }
+  .empty-rink {
+    width: 120px; height: 80px;
+    border: 2px solid var(--border);
+    border-radius: 40%;
+    margin: 0 auto 20px;
+    position: relative;
+    opacity: 0.4;
+  }
+  .empty-rink::before {
+    content: '';
+    position: absolute;
+    left: 50%; top: 0; bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+  .empty-rink::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+  }
+  .empty-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 8px;
+  }
+  .empty-sub {
+    font-size: 13px;
+    color: var(--dim);
+    opacity: 0.6;
+  }
+
+  /* ── FILTER ROW ── */
+  .filter-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .filter-input {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--ice);
+    font-family: 'Barlow', sans-serif;
+    font-size: 13px;
+    padding: 7px 12px;
+    border-radius: 3px;
+    outline: none;
+    width: 220px;
+    transition: border-color 0.2s;
+  }
+  .filter-input::placeholder { color: var(--dim); }
+  .filter-input:focus { border-color: var(--cyan); }
+
+  .toi-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .toi-filter input { width: 64px; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--dark); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-rink"></div>
+  <div>
+    <h1>NHL Line <span>Chemistry</span></h1>
+    <div class="header-sub">5v5 Pair Analytics &bull; NHL Official API</div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Team</label>
+    <select id="teamSelect"></select>
+  </div>
+  <div class="control-group">
+    <label>Season</label>
+    <select id="seasonSelect">
+      <option value="20242025">2024–25</option>
+      <option value="20232024">2023–24</option>
+      <option value="20222023">2022–23</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>Games (0 = all)</label>
+    <input type="number" id="maxGames" value="10" min="1" max="82">
+  </div>
+  <button class="btn btn-primary" id="runBtn" onclick="runAnalysis()">Analyze</button>
+  <button class="btn btn-secondary" id="clearBtn" onclick="clearResults()">Clear</button>
+
+  <div style="flex:1"></div>
+
+  <div class="control-group">
+    <label>Sort by</label>
+    <div class="sort-group">
+      <button class="sort-btn active" data-sort="gd_per_60"  onclick="setSort(this)">GD/60</button>
+      <button class="sort-btn"        data-sort="cf_pct"     onclick="setSort(this)">CF%</button>
+      <button class="sort-btn"        data-sort="ff_pct"     onclick="setSort(this)">FF%</button>
+      <button class="sort-btn"        data-sort="toi_min"    onclick="setSort(this)">TOI</button>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="status-bar">
+    <div class="status-tag status-idle" id="statusTag">READY</div>
+    <div class="status-text" id="statusText">Select a team and click Analyze</div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label" id="progressLabel">Loading game 0 / 0</div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+
+  <div class="summary-cards" id="summaryCards" style="display:none">
+    <div class="card">
+      <div class="card-label">Pairs Analyzed</div>
+      <div class="card-value cyan" id="statPairs">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Games Processed</div>
+      <div class="card-value" id="statGames">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Best GD/60</div>
+      <div class="card-value green" id="statBestGD">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Best CF%</div>
+      <div class="card-value gold" id="statBestCF">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Avg TOI (top 20)</div>
+      <div class="card-value" id="statAvgTOI">—</div>
+    </div>
+  </div>
+
+  <div id="resultsArea">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-rink"></div>
+      <div class="empty-title">No data loaded</div>
+      <div class="empty-sub">Choose a team, set game count, and click Analyze</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Teams ──────────────────────────────────────────────────────────────────
+const TEAMS = [
+  "ANA","ARI","BOS","BUF","CAR","CBJ","CGY","CHI","COL","DAL",
+  "DET","EDM","FLA","LAK","MIN","MTL","NJD","NSH","NYI","NYR",
+  "OTT","PHI","PIT","SEA","SJS","STL","TBL","TOR","UTA","VAN","VGK","WPG"
+];
+
+const API = "http://localhost:5000/api";
+
+// ── State ──────────────────────────────────────────────────────────────────
+let currentData   = [];
+let currentSort   = "gd_per_60";
+let currentAsc    = false;
+let abortFlag     = false;
+let gamesProcessed = 0;
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(function init() {
+  const sel = document.getElementById("teamSelect");
+  TEAMS.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    if (t === "BUF") opt.selected = true;
+    sel.appendChild(opt);
+  });
+})();
+
+// ── API helpers ────────────────────────────────────────────────────────────
+async function apiFetch(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} — ${txt.slice(0,120)}`);
+  }
+  return res.json();
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Fetch game IDs (via server) ────────────────────────────────────────────
+async function getGameIds(team, season, maxGames) {
+  const data = await apiFetch(`${API}/games?team=${team}&season=${season}`);
+  if (data.error) throw new Error(data.error);
+  let ids = data.gameIds || [];
+  if (maxGames > 0) ids = ids.slice(0, maxGames);
+  return ids;
+}
+
+// ── Fetch roster (via server) ──────────────────────────────────────────────
+async function getRoster(team) {
+  const data = await apiFetch(`${API}/roster?team=${team}`);
+  if (data.error) throw new Error(data.error);
+  return data; // {playerId: {name, pos}}
+}
+
+// ── Process one game (via server) ─────────────────────────────────────────
+async function parseGame(gameId, goalieIds) {
+  const goalieParam = [...goalieIds].join(",");
+  const data = await apiFetch(`${API}/game/${gameId}?goalies=${goalieParam}`);
+  if (data.error) throw new Error(data.error);
+  // Convert array of pairs back to keyed object for mergePairs()
+  const pairs = {};
+  for (const p of (data.pairs || [])) {
+    const key = `${p.p1}_${p.p2}`;
+    pairs[key] = p;
+  }
+  return pairs;
+}
+
+// ── Aggregate ──────────────────────────────────────────────────────────────
+function mergePairs(totals, gamePairs) {
+  for (const [key, s] of Object.entries(gamePairs)) {
+    if (!totals[key]) {
+      totals[key] = { ...s };
+    } else {
+      for (const f of ["toi","gf","ga","sf","sa","ff","fa","cf","ca"])
+        totals[key][f] += s[f];
+    }
+  }
+}
+
+function computeMetrics(totals) {
+  return Object.values(totals).map(s => {
+    const toiMin  = s.toi / 60;
+    const gd      = s.gf - s.ga;
+    const cfTot   = s.cf + s.ca;
+    const ffTot   = s.ff + s.fa;
+    return {
+      ...s,
+      toi_min:   +toiMin.toFixed(1),
+      gd_per_60: toiMin > 0 ? +(gd / toiMin * 60).toFixed(2) : 0,
+      cf_pct:    cfTot  > 0 ? +(s.cf / cfTot * 100).toFixed(1) : 0,
+      ff_pct:    ffTot  > 0 ? +(s.ff / ffTot * 100).toFixed(1) : 0,
+    };
+  });
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+function setStatus(type, tag, text) {
+  const el = document.getElementById("statusTag");
+  const tx = document.getElementById("statusText");
+  el.className = `status-tag status-${type}`;
+  el.textContent = tag;
+  tx.textContent = text;
+}
+
+function setProgress(cur, total) {
+  const wrap  = document.getElementById("progressWrap");
+  const label = document.getElementById("progressLabel");
+  const fill  = document.getElementById("progressFill");
+  wrap.classList.toggle("visible", total > 0);
+  label.textContent = `Processing game ${cur} / ${total}`;
+  fill.style.width  = total > 0 ? `${(cur/total)*100}%` : "0%";
+}
+
+function clearResults() {
+  abortFlag = true;
+  currentData = [];
+  document.getElementById("emptyState") && (document.getElementById("resultsArea").innerHTML = `
+    <div class="empty-state" id="emptyState">
+      <div class="empty-rink"></div>
+      <div class="empty-title">No data loaded</div>
+      <div class="empty-sub">Choose a team, set game count, and click Analyze</div>
+    </div>`);
+  document.getElementById("summaryCards").style.display = "none";
+  setProgress(0, 0);
+  setStatus("idle", "READY", "Select a team and click Analyze");
+  document.getElementById("runBtn").disabled = false;
+}
+
+// ── Sort / filter helpers ──────────────────────────────────────────────────
+function setSort(btn) {
+  const newSort = btn.dataset.sort;
+  if (currentSort === newSort) {
+    currentAsc = !currentAsc;
+  } else {
+    currentSort = newSort;
+    currentAsc  = false;
+  }
+  document.querySelectorAll(".sort-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderTable();
+}
+
+function getFilteredSorted() {
+  const search  = (document.getElementById("searchInput")?.value || "").toLowerCase();
+  const minToi  = parseFloat(document.getElementById("minToi")?.value) || 0;
+
+  let rows = currentData.filter(r =>
+    r.toi_min >= minToi &&
+    (!search || r.name1.toLowerCase().includes(search) || r.name2.toLowerCase().includes(search))
+  );
+
+  rows.sort((a, b) => {
+    const av = a[currentSort] ?? 0, bv = b[currentSort] ?? 0;
+    return currentAsc ? av - bv : bv - av;
+  });
+
+  return rows;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderTable() {
+  const rows   = getFilteredSorted();
+  const topN   = 50;
+  const shown  = rows.slice(0, topN);
+
+  // Update column headers
+  document.querySelectorAll("thead th[data-col]").forEach(th => {
+    th.classList.remove("sort-asc","sort-desc");
+    if (th.dataset.col === currentSort)
+      th.classList.add(currentAsc ? "sort-asc" : "sort-desc");
+  });
+
+  // Bar scale
+  const maxGD    = Math.max(...shown.map(r => Math.abs(r.gd_per_60)), 1);
+  const maxToi   = Math.max(...shown.map(r => r.toi_min), 1);
+
+  document.getElementById("tableCount").textContent = `${rows.length} pairs`;
+
+  const tbody = document.getElementById("pairTbody");
+  tbody.innerHTML = shown.map((r, i) => {
+    const gdClass = r.gd_per_60 > 0 ? "gd-positive" : r.gd_per_60 < 0 ? "gd-negative" : "gd-neutral";
+    const gdSign  = r.gd_per_60 > 0 ? "+" : "";
+    const gdBar   = Math.abs(r.gd_per_60) / maxGD * 100;
+    const gdColor = r.gd_per_60 >= 0 ? "var(--green)" : "var(--red)";
+
+    const cfColor = r.cf_pct >= 55 ? "var(--green)" : r.cf_pct >= 50 ? "var(--cyan)" : r.cf_pct >= 45 ? "var(--gold)" : "var(--red)";
+    const cfBar   = r.cf_pct;
+
+    const toiBar  = r.toi_min / maxToi * 100;
+
+    const topBadge = i === 0 ? '<span class="badge badge-top">TOP</span>' : '';
+
+    return `<tr style="animation-delay:${i*20}ms">
+      <td class="td-rank">${i+1}</td>
+      <td class="td-players">
+        ${r.name1}<span class="sep">&amp;</span>${r.name2}${topBadge}
+      </td>
+      <td class="td-bar-cell">
+        <div class="bar-wrap">
+          <div class="bar-track"><div class="bar-fill" style="width:${toiBar}%;background:var(--blue-mid)"></div></div>
+          <span class="bar-val" style="color:var(--text)">${r.toi_min}</span>
+        </div>
+      </td>
+      <td class="td-num">${r.gf}</td>
+      <td class="td-num">${r.ga}</td>
+      <td class="td-bar-cell">
+        <div class="bar-wrap">
+          <div class="bar-track"><div class="bar-fill" style="width:${gdBar}%;background:${gdColor}"></div></div>
+          <span class="bar-val ${gdClass}">${gdSign}${r.gd_per_60}</span>
+        </div>
+      </td>
+      <td class="td-bar-cell">
+        <div class="bar-wrap">
+          <div class="bar-track"><div class="bar-fill" style="width:${cfBar}%;background:${cfColor}"></div></div>
+          <span class="bar-val" style="color:${cfColor}">${r.cf_pct}%</span>
+        </div>
+      </td>
+      <td class="td-num" style="color:var(--dim)">${r.ff_pct}%</td>
+    </tr>`;
+  }).join("");
+}
+
+function buildTableHTML() {
+  return `
+    <div class="filter-row">
+      <input class="filter-input" id="searchInput" placeholder="Filter by player name..." oninput="renderTable()">
+      <div class="toi-filter">
+        Min TOI (min)
+        <input type="number" class="filter-input" id="minToi" value="10" min="0" style="width:64px" oninput="renderTable()">
+      </div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <span class="table-title">Pair Chemistry — 5v5</span>
+        <span class="table-count" id="tableCount">—</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th class="td-rank">#</th>
+            <th onclick="sortByCol('name1')">Players</th>
+            <th data-col="toi_min" class="num" onclick="sortByCol('toi_min')">TOI (min)</th>
+            <th data-col="gf" class="num" onclick="sortByCol('gf')">GF</th>
+            <th data-col="ga" class="num" onclick="sortByCol('ga')">GA</th>
+            <th data-col="gd_per_60" onclick="sortByCol('gd_per_60')">GD / 60</th>
+            <th data-col="cf_pct" onclick="sortByCol('cf_pct')">CF %</th>
+            <th data-col="ff_pct" class="num" onclick="sortByCol('ff_pct')">FF %</th>
+          </tr>
+        </thead>
+        <tbody id="pairTbody"></tbody>
+      </table>
+    </div>`;
+}
+
+function sortByCol(col) {
+  if (currentSort === col) {
+    currentAsc = !currentAsc;
+  } else {
+    currentSort = col;
+    currentAsc  = col === "name1";
+  }
+  document.querySelectorAll(".sort-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.sort === col);
+  });
+  renderTable();
+}
+
+function updateSummaryCards(rows, gamesCount) {
+  document.getElementById("summaryCards").style.display = "";
+  document.getElementById("statPairs").textContent  = rows.length;
+  document.getElementById("statGames").textContent  = gamesCount;
+
+  const sorted_gd = [...rows].sort((a,b) => b.gd_per_60 - a.gd_per_60);
+  const sorted_cf = [...rows].sort((a,b) => b.cf_pct    - a.cf_pct);
+
+  document.getElementById("statBestGD").textContent =
+    sorted_gd.length ? `+${sorted_gd[0].gd_per_60}` : "—";
+  document.getElementById("statBestCF").textContent =
+    sorted_cf.length ? `${sorted_cf[0].cf_pct}%` : "—";
+
+  const top20 = sorted_gd.slice(0,20);
+  const avgToi = top20.length
+    ? (top20.reduce((s,r) => s + r.toi_min, 0) / top20.length).toFixed(1)
+    : "—";
+  document.getElementById("statAvgTOI").textContent = avgToi;
+}
+
+// ── Main analysis loop ─────────────────────────────────────────────────────
+async function runAnalysis() {
+  abortFlag = false;
+  const team     = document.getElementById("teamSelect").value;
+  const season   = document.getElementById("seasonSelect").value;
+  const maxGames = parseInt(document.getElementById("maxGames").value) || 0;
+
+  document.getElementById("runBtn").disabled = true;
+  document.getElementById("summaryCards").style.display = "none";
+  document.getElementById("resultsArea").innerHTML = "";
+  setStatus("loading", "LOADING", `Fetching ${team} schedule...`);
+
+  try {
+    // 1. roster
+    setStatus("loading", "LOADING", "Fetching roster...");
+    const roster = await getRoster(team);
+    const goalieIds = new Set(
+      Object.entries(roster).filter(([,v]) => v.pos === "G").map(([k]) => +k)
+    );
+
+    // 2. game IDs
+    setStatus("loading", "LOADING", "Fetching schedule...");
+    const gameIds = await getGameIds(team, season, maxGames);
+    if (!gameIds.length) throw new Error("No completed games found.");
+
+    setStatus("loading", "LOADING", `Processing ${gameIds.length} games...`);
+    setProgress(0, gameIds.length);
+
+    // 3. process games
+    const totals = {};
+    let processed = 0, errors = 0;
+
+    for (const gid of gameIds) {
+      if (abortFlag) break;
+      try {
+        const gamePairs = await parseGame(gid, goalieIds);
+        mergePairs(totals, gamePairs);
+        processed++;
+      } catch(e) {
+        errors++;
+        console.warn(`Game ${gid} failed:`, e.message);
+      }
+      setProgress(processed + errors, gameIds.length);
+      setStatus("loading", "LOADING",
+        `Game ${processed + errors} / ${gameIds.length} — ${processed} ok, ${errors} errors`);
+      await sleep(250);
+    }
+
+    // 4. compute & render
+    const metrics = computeMetrics(totals);
+
+    // attach player names
+    currentData = metrics.map(r => ({
+      ...r,
+      name1: roster[r.p1]?.name || `#${r.p1}`,
+      name2: roster[r.p2]?.name || `#${r.p2}`,
+    }));
+
+    gamesProcessed = processed;
+    document.getElementById("resultsArea").innerHTML = buildTableHTML();
+    updateSummaryCards(currentData, processed);
+    renderTable();
+
+    setStatus("done", "DONE",
+      `${processed} games processed &bull; ${currentData.length} pairs &bull; ${errors} errors`);
+    setProgress(0, 0);
+
+  } catch(err) {
+    setStatus("error", "ERROR", err.message);
+    console.error(err);
+  }
+
+  document.getElementById("runBtn").disabled = false;
+}
+</script>
+</body>
+</html>

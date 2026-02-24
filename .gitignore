@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+shift_pair_stats.json
+pair_stats_sample.json

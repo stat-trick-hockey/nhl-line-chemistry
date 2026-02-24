@@ -670,13 +670,12 @@ async function parseGame(gameId, goalieIds) {
   // Convert array of pairs back to keyed object for mergePairs()
   const pairs = {};
   for (const p of (data.pairs || [])) {
-    // p1/p2 are strings from server, ensure consistent keys
     p.p1 = String(p.p1);
     p.p2 = String(p.p2);
     const key = `${p.p1}_${p.p2}`;
     pairs[key] = p;
   }
-  return pairs;
+  return { pairs, players: data.players || {} };
 }
 
 // ── Aggregate ──────────────────────────────────────────────────────────────
@@ -929,6 +928,7 @@ async function runAnalysis() {
 
     // 3. process games
     const totals = {};
+    const playerMap = {}; // accumulates name lookups from every game
     let processed = 0, errors = 0;
 
     for (const gid of gameIds) {
@@ -951,18 +951,13 @@ async function runAnalysis() {
     const metrics = computeMetrics(totals);
 
     // attach player names
-    // Debug: log a sample to verify roster keys match pair IDs
-    const samplePair = metrics[0];
-    if (samplePair) {
-      console.log("Sample p1:", samplePair.p1, typeof samplePair.p1,
-                  "-> roster hit:", roster[String(samplePair.p1)]);
-      console.log("Roster keys sample:", Object.keys(roster).slice(0,3));
-    }
+    // Merge roster into playerMap as fallback
+    Object.assign(playerMap, roster);
 
     currentData = metrics.map(r => ({
       ...r,
-      name1: roster[String(r.p1)]?.name || `#${r.p1}`,
-      name2: roster[String(r.p2)]?.name || `#${r.p2}`,
+      name1: playerMap[String(r.p1)]?.name || `#${r.p1}`,
+      name2: playerMap[String(r.p2)]?.name || `#${r.p2}`,
     }));
 
     gamesProcessed = processed;

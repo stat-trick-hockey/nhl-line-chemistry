@@ -81,8 +81,9 @@ def get_games():
 def get_roster():
     team = request.args.get("team", "BUF")
     try:
-        data    = web_get(f"/roster/{team}/current")
         players = {}
+        # Current roster (for goalie detection)
+        data = web_get(f"/roster/{team}/current")
         for group in ("forwards", "defensemen", "goalies"):
             for p in data.get(group, []):
                 first = p.get("firstName", {}).get("default", "")
@@ -130,6 +131,16 @@ def process_game(game_id):
         pbp     = web_get(f"/gamecenter/{game_id}/play-by-play")
         home_id = pbp["homeTeam"]["id"]
         away_id = pbp["awayTeam"]["id"]
+
+        # Extract all players who appeared in this game from rosterSpots
+        game_players = {}
+        for spot in pbp.get("rosterSpots", []):
+            pid   = spot.get("playerId")
+            first = spot.get("firstName", {}).get("default", "")
+            last  = spot.get("lastName",  {}).get("default", "")
+            pos   = spot.get("positionCode", "")
+            if pid:
+                game_players[str(pid)] = {"name": f"{first} {last}".strip(), "pos": pos}
 
         pairs      = {}
         toi_buckets = {}
@@ -201,7 +212,7 @@ def process_game(game_id):
                             if is_for: s["cf"] += 1
                             if is_agn: s["ca"] += 1
 
-        return jsonify({"pairs": list(pairs.values()), "homeId": home_id, "awayId": away_id})
+        return jsonify({"pairs": list(pairs.values()), "homeId": home_id, "awayId": away_id, "players": game_players})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

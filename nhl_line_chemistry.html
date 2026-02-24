@@ -934,8 +934,10 @@ async function runAnalysis() {
     for (const gid of gameIds) {
       if (abortFlag) break;
       try {
-        const gamePairs = await parseGame(gid, goalieIds);
-        mergePairs(totals, gamePairs);
+        const result = await parseGame(gid, goalieIds);
+        console.log(`Game ${gid}:`, result.debug, "| pairs:", Object.keys(result.pairs).length);
+        mergePairs(totals, result.pairs);
+        Object.assign(playerMap, result.players || {});
         processed++;
       } catch(e) {
         errors++;

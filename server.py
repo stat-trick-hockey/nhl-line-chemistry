@@ -110,9 +110,16 @@ def process_game(game_id):
 
     try:
         # Shifts
-        shift_data = stat_get("/shiftcharts", {"cayenneExp": f"gameId={game_id}"})
+        try:
+            shift_data = stat_get("/shiftcharts", {"cayenneExp": f"gameId={game_id}"})
+        except Exception as shift_err:
+            return jsonify({"error": f"Shift chart fetch failed: {shift_err}"}), 500
+
+        shift_records = shift_data.get("data", [])
+        print(f"[game {game_id}] shifts: {len(shift_records)} records")
+
         intervals  = {}
-        for s in shift_data.get("data", []):
+        for s in shift_records:
             pid    = s.get("playerId")
             tid    = s.get("teamId")
             period = s.get("period", 1)
@@ -213,6 +220,7 @@ def process_game(game_id):
                             if is_for: s["cf"] += 1
                             if is_agn: s["ca"] += 1
 
+        print(f"[game {game_id}] intervals: {len(intervals)} players, plays: {len(pbp.get('plays', []))}, pairs: {len(pairs)}")
         return jsonify({
             "pairs":        list(pairs.values()),
             "homeId":       home_id,

@@ -595,6 +595,14 @@
     <label>Games (0 = all)</label>
     <input type="number" id="maxGames" value="10" min="1" max="82">
   </div>
+  <div class="control-group">
+    <label>Mode</label>
+    <select id="modeSelect">
+      <option value="pairs">All Pairs</option>
+      <option value="trios">Forward Trios</option>
+      <option value="d-pairs">Defensive Pairs</option>
+    </select>
+  </div>
   <button class="btn btn-primary" id="runBtn" onclick="runAnalysis()">Analyze</button>
   <button class="btn btn-secondary" id="clearBtn" onclick="clearResults()">Clear</button>
 
@@ -714,9 +722,9 @@ async function getRoster(team) {
 }
 
 // ── Process one game (via server) ─────────────────────────────────────────
-async function parseGame(gameId, goalieIds) {
+async function parseGame(gameId, goalieIds, mode = "pairs") {
   const goalieParam = [...goalieIds].join(",");
-  const data = await apiFetch(`${API}/game/${gameId}?goalies=${goalieParam}`);
+  const data = await apiFetch(`${API}/game/${gameId}?goalies=${goalieParam}&mode=${mode}`);
   if (data.error) throw new Error(data.error);
   // Convert array of pairs back to keyed object for mergePairs()
   const pairs = {};
@@ -823,6 +831,13 @@ function getFilteredSorted() {
 
 // ── Render ─────────────────────────────────────────────────────────────────
 function renderTable() {
+  // Update table title based on mode
+  const mode = document.getElementById("modeSelect")?.value || "pairs";
+  const titleEl = document.getElementById("tableTitle");
+  if (titleEl) {
+    const titles = { "pairs": "All Pairs — 5v5", "trios": "Forward Trios — 5v5", "d-pairs": "Defensive Pairs — 5v5" };
+    titleEl.textContent = titles[mode] || "Pair Chemistry — 5v5";
+  }
   const rows   = getFilteredSorted();
   const topN   = 50;
   const shown  = rows.slice(0, topN);
@@ -857,7 +872,7 @@ function renderTable() {
     return `<tr style="animation-delay:${i*20}ms">
       <td class="td-rank">${i+1}</td>
       <td class="td-players">
-        ${r.name1}<span class="sep">&amp;</span>${r.name2}${topBadge}
+        ${r.names ? r.names.join('<span class="sep"> / </span>') : r.name1 + '<span class="sep"> &amp; </span>' + r.name2}${topBadge}
       </td>
       <td class="td-bar-cell">
         <div class="bar-wrap">
@@ -896,14 +911,14 @@ function buildTableHTML() {
     </div>
     <div class="table-wrap">
       <div class="table-header">
-        <span class="table-title">Pair Chemistry — 5v5</span>
+        <span class="table-title" id="tableTitle">Pair Chemistry — 5v5</span>
         <span class="table-count" id="tableCount">—</span>
       </div>
       <table>
         <thead>
           <tr>
             <th class="td-rank">#</th>
-            <th onclick="sortByCol('name1')">Players</th>
+            <th onclick="sortByCol('name1')" id="playersHeader">Players</th>
             <th data-col="toi_min" class="num" onclick="sortByCol('toi_min')">TOI (min)</th>
             <th data-col="gf" class="num" onclick="sortByCol('gf')">GF</th>
             <th data-col="ga" class="num" onclick="sortByCol('ga')">GA</th>
@@ -956,6 +971,7 @@ async function runAnalysis() {
   const team     = document.getElementById("teamSelect").value;
   const season   = document.getElementById("seasonSelect").value;
   const maxGames = parseInt(document.getElementById("maxGames").value) || 0;
+  const mode     = document.getElementById("modeSelect").value;
 
   document.getElementById("runBtn").disabled = true;
   document.getElementById("summaryCards").style.display = "none";
@@ -986,7 +1002,7 @@ async function runAnalysis() {
     for (const gid of gameIds) {
       if (abortFlag) break;
       try {
-        const result = await parseGame(gid, goalieIds);
+        const result = await parseGame(gid, goalieIds, mode);
         console.log(`Game ${gid}:`, result.debug, "| pairs:", Object.keys(result.pairs).length);
         mergePairs(totals, result.pairs);
         Object.assign(playerMap, result.players || {});
@@ -1028,6 +1044,7 @@ async function runAnalysis() {
         ...r,
         name1: playerMap[String(r.p1)]?.name || `#${r.p1}`,
         name2: playerMap[String(r.p2)]?.name || `#${r.p2}`,
+        names: (r.players || [r.p1, r.p2]).map(pid => playerMap[String(pid)]?.name || `#${pid}`),
       }));
 
     gamesProcessed = processed;

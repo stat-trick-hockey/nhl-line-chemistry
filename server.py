@@ -102,11 +102,15 @@ def get_roster():
 @app.route("/api/game/<int:game_id>")
 def process_game(game_id):
     """
-    Fetches shifts + PBP for one game and returns pair stats.
-    The frontend calls this once per game and accumulates results itself.
+    Fetches shifts + PBP for one game and returns combination stats.
+
+    mode param:
+      "pairs"   - all skater pairs (default)
+      "trios"   - forward lines (groups of 3 forwards)
+      "d-pairs" - defensive pairs (groups of 2 defensemen)
     """
-    goalie_ids_param = request.args.get("goalies", "")
-    goalie_ids = set(int(x) for x in goalie_ids_param.split(",") if x.strip())
+    mode = request.args.get("mode", "pairs")
+    combo_size = 3 if mode == "trios" else 2
 
     try:
         # Shifts
@@ -179,46 +183,60 @@ def process_game(game_id):
                 (home_on, away_id, home_id),
                 (away_on, home_id, away_id),
             ]:
-                skaters = sorted(p for p in team_ids if p not in goalie_ids)
-                if len(skaters) < 2:
+                # Always exclude goalies
+                def get_pos(pid):
+                    return game_players.get(str(pid), {}).get("pos", "")
+
+                if mode == "trios":
+                    # Forwards only: C, L, R, F
+                    eligible = sorted(p for p in team_ids if get_pos(p) in ("C", "L", "R", "F", "LW", "RW"))
+                elif mode == "d-pairs":
+                    # Defensemen only
+                    eligible = sorted(p for p in team_ids if get_pos(p) == "D")
+                else:
+                    # All skaters, exclude goalies
+                    eligible = sorted(p for p in team_ids if get_pos(p) != "G" and get_pos(p) != "")
+
+                if len(eligible) < combo_size:
                     continue
 
-                for i in range(len(skaters) - 1):
-                    for j in range(i + 1, len(skaters)):
-                        p1, p2  = skaters[i], skaters[j]
-                        key     = f"{p1}_{p2}"
-                        is_for  = ev_team == team_id
-                        is_agn  = ev_team == opp_id
+                from itertools import combinations as _combos
+                for combo in _combos(eligible, combo_size):
+                    key    = "_".join(str(p) for p in combo)
+                    is_for = ev_team == team_id
+                    is_agn = ev_team == opp_id
 
-                        if key not in pairs:
-                            pairs[key] = {
-                                "p1": str(p1), "p2": str(p2), "teamId": team_id,
-                                "toi": 0,
-                                "gf": 0, "ga": 0,
-                                "sf": 0, "sa": 0,
-                                "ff": 0, "fa": 0,
-                                "cf": 0, "ca": 0,
-                            }
-                            toi_buckets[key] = set()
+                    if key not in pairs:
+                        pairs[key] = {
+                            "players": [str(p) for p in combo],
+                            "p1": str(combo[0]), "p2": str(combo[1]),
+                            "teamId": team_id,
+                            "toi": 0,
+                            "gf": 0, "ga": 0,
+                            "sf": 0, "sa": 0,
+                            "ff": 0, "fa": 0,
+                            "cf": 0, "ca": 0,
+                        }
+                        toi_buckets[key] = set()
 
-                        bucket = f"{period}_{min_buck}"
-                        if bucket not in toi_buckets[key]:
-                            toi_buckets[key].add(bucket)
-                            pairs[key]["toi"] += 60
+                    bucket = f"{period}_{min_buck}"
+                    if bucket not in toi_buckets[key]:
+                        toi_buckets[key].add(bucket)
+                        pairs[key]["toi"] += 60
 
-                        s = pairs[key]
-                        if ev_type == "goal":
-                            if is_for: s["gf"] += 1
-                            if is_agn: s["ga"] += 1
-                        elif ev_type == "shot-on-goal":
-                            if is_for: s["sf"] += 1; s["ff"] += 1; s["cf"] += 1
-                            if is_agn: s["sa"] += 1; s["fa"] += 1; s["ca"] += 1
-                        elif ev_type == "missed-shot":
-                            if is_for: s["ff"] += 1; s["cf"] += 1
-                            if is_agn: s["fa"] += 1; s["ca"] += 1
-                        elif ev_type == "blocked-shot":
-                            if is_for: s["cf"] += 1
-                            if is_agn: s["ca"] += 1
+                    s = pairs[key]
+                    if ev_type == "goal":
+                        if is_for: s["gf"] += 1
+                        if is_agn: s["ga"] += 1
+                    elif ev_type == "shot-on-goal":
+                        if is_for: s["sf"] += 1; s["ff"] += 1; s["cf"] += 1
+                        if is_agn: s["sa"] += 1; s["fa"] += 1; s["ca"] += 1
+                    elif ev_type == "missed-shot":
+                        if is_for: s["ff"] += 1; s["cf"] += 1
+                        if is_agn: s["fa"] += 1; s["ca"] += 1
+                    elif ev_type == "blocked-shot":
+                        if is_for: s["cf"] += 1
+                        if is_agn: s["ca"] += 1
 
         print(f"[game {game_id}] intervals: {len(intervals)} players, plays: {len(pbp.get('plays', []))}, pairs: {len(pairs)}")
         return jsonify({

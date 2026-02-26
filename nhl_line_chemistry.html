@@ -283,6 +283,16 @@
     color: var(--dim);
     margin-bottom: 6px;
   }
+  .card-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 4px;
+    opacity: 0.7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .card-value {
     font-family: 'Barlow Condensed', sans-serif;
     font-size: 28px;
@@ -560,6 +570,73 @@
     h1 { font-size: 15px; }
   }
 
+  /* ── GLOSSARY ── */
+  .glossary {
+    margin-top: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .glossary-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+  }
+  .glossary-header:hover { background: var(--panel2); }
+  .glossary-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .glossary-toggle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--cyan);
+  }
+  .glossary-body {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .glossary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .glossary-item {}
+  .glossary-term {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 5px;
+  }
+  .glossary-def {
+    font-size: 12px;
+    color: var(--dim);
+    line-height: 1.6;
+  }
+  .glossary-note {
+    font-size: 12px;
+    color: var(--dim);
+    line-height: 1.6;
+    padding: 12px 14px;
+    background: rgba(0,200,240,0.04);
+    border: 1px solid rgba(0,200,240,0.1);
+    border-radius: 3px;
+  }
+  .glossary-note strong { color: var(--text); }
+
   /* scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: var(--dark); }
@@ -633,24 +710,29 @@
 
   <div class="summary-cards" id="summaryCards" style="display:none">
     <div class="card">
-      <div class="card-label">Pairs Analyzed</div>
+      <div class="card-label" id="labelPairs">Pairs Analyzed</div>
       <div class="card-value cyan" id="statPairs">—</div>
+      <div class="card-sub" id="subPairs"></div>
     </div>
     <div class="card">
       <div class="card-label">Games Processed</div>
       <div class="card-value" id="statGames">—</div>
+      <div class="card-sub" id="subGames"></div>
     </div>
     <div class="card">
-      <div class="card-label">Best GD/60</div>
+      <div class="card-label" id="labelBestGD">Best GD/60</div>
       <div class="card-value green" id="statBestGD">—</div>
+      <div class="card-sub" id="subBestGD"></div>
     </div>
     <div class="card">
       <div class="card-label">Best CF%</div>
       <div class="card-value gold" id="statBestCF">—</div>
+      <div class="card-sub" id="subBestCF"></div>
     </div>
     <div class="card">
-      <div class="card-label">Avg TOI (top 20)</div>
+      <div class="card-label" id="labelAvgTOI">Avg TOI (top 20)</div>
       <div class="card-value" id="statAvgTOI">—</div>
+      <div class="card-sub" id="subAvgTOI"></div>
     </div>
   </div>
 
@@ -853,7 +935,9 @@ function renderTable() {
   const maxGD    = Math.max(...shown.map(r => Math.abs(r.gd_per_60)), 1);
   const maxToi   = Math.max(...shown.map(r => r.toi_min), 1);
 
-  document.getElementById("tableCount").textContent = `${rows.length} pairs`;
+  document.getElementById("tableCount").textContent = `${rows.length} ${(document.getElementById("modeSelect")?.value === "trios" ? "trios" : document.getElementById("modeSelect")?.value === "d-pairs" ? "d-pairs" : "pairs")}`;
+  // Keep summary cards in sync with current filters
+  if (currentData.length) updateSummaryCards(currentData, gamesProcessed);
 
   const tbody = document.getElementById("pairTbody");
   tbody.innerHTML = shown.map((r, i) => {
@@ -929,7 +1013,55 @@ function buildTableHTML() {
         </thead>
         <tbody id="pairTbody"></tbody>
       </table>
+    </div>
+    <div class="glossary" id="glossary">
+      <div class="glossary-header" onclick="toggleGlossary()">
+        <span class="glossary-title">Metric Definitions &amp; How to Interpret</span>
+        <span class="glossary-toggle" id="glossaryToggle">+ show</span>
+      </div>
+      <div class="glossary-body" id="glossaryBody" style="display:none">
+        <div class="glossary-grid">
+          <div class="glossary-item">
+            <div class="glossary-term">TOI (min)</div>
+            <div class="glossary-def">Shared ice time in minutes at 5v5. Higher TOI means more data — pairs under ~10 min should be treated cautiously. Use the Min TOI filter to remove low-sample noise.</div>
+          </div>
+          <div class="glossary-item">
+            <div class="glossary-term">GF / GA</div>
+            <div class="glossary-def">Goals scored (For) and goals conceded (Against) while this combination was on ice at 5v5. Raw counts — useful context but heavily sample-dependent.</div>
+          </div>
+          <div class="glossary-item">
+            <div class="glossary-term">GD / 60</div>
+            <div class="glossary-def">Goal differential per 60 minutes of shared ice time. Positive means more goals scored than conceded per hour. The primary performance metric — above +2.0 is excellent, below -2.0 is a concern. Small samples make this volatile.</div>
+          </div>
+          <div class="glossary-item">
+            <div class="glossary-term">CF %</div>
+            <div class="glossary-def">Corsi For percentage — shot attempts for ÷ total shot attempts (for + against) × 100, including shots on goal, missed shots, and blocked shots. Above 50% means the combination controls possession. 53%+ is elite, 47% or below is a liability. More stable than GD/60 over small samples.</div>
+          </div>
+          <div class="glossary-item">
+            <div class="glossary-term">FF %</div>
+            <div class="glossary-def">Fenwick For percentage — same as CF% but excludes blocked shots. Considered slightly more predictive than Corsi since unblocked attempts better reflect zone pressure and shooting quality.</div>
+          </div>
+          <div class="glossary-item">
+            <div class="glossary-term">5v5 Only</div>
+            <div class="glossary-def">All metrics are filtered to even-strength 5-on-5 play only (situation code 1551). Powerplay and penalty kill minutes are excluded to isolate true line chemistry from special teams deployment.</div>
+          </div>
+        </div>
+        <div class="glossary-note">
+          <strong>General guidance:</strong> For small game samples (under 10 games), CF% is more reliable than GD/60. 
+          For a full season, GD/60 is the headline metric. A combination that ranks well on both is genuinely driving play.
+          Pairs with high TOI but average metrics may be being sheltered — check their zone start splits for full context.
+        </div>
+      </div>
     </div>`;
+}
+
+function toggleGlossary() {
+  const body   = document.getElementById("glossaryBody");
+  const toggle = document.getElementById("glossaryToggle");
+  if (!body) return;
+  const isHidden = body.style.display === "none";
+  body.style.display   = isHidden ? "block" : "none";
+  toggle.textContent   = isHidden ? "− hide" : "+ show";
 }
 
 function sortByCol(col) {
@@ -945,24 +1077,61 @@ function sortByCol(col) {
   renderTable();
 }
 
-function updateSummaryCards(rows, gamesCount) {
+function updateSummaryCards(allRows, gamesCount) {
+  // Use filtered rows (respects min TOI + search) for all metrics
+  const rows = getFilteredSorted();
+
+  const mode = document.getElementById("modeSelect")?.value || "pairs";
+  const modeLabels = {
+    "pairs":   { unit: "Pairs",  analyzed: "Pairs Analyzed",  avgLabel: "Avg TOI — Top 20 Pairs" },
+    "trios":   { unit: "Trios",  analyzed: "Trios Analyzed",  avgLabel: "Avg TOI — Top 20 Trios" },
+    "d-pairs": { unit: "D-Pairs",analyzed: "D-Pairs Analyzed",avgLabel: "Avg TOI — Top 20 D-Pairs" },
+  };
+  const ml = modeLabels[mode] || modeLabels["pairs"];
+
   document.getElementById("summaryCards").style.display = "";
+
+  // Card 1: unit count (filtered)
+  document.getElementById("labelPairs").textContent = ml.analyzed;
   document.getElementById("statPairs").textContent  = rows.length;
-  document.getElementById("statGames").textContent  = gamesCount;
+  const totalUnfiltered = allRows.length;
+  document.getElementById("subPairs").textContent =
+    rows.length < totalUnfiltered ? `${totalUnfiltered - rows.length} below min TOI` : `all ${ml.unit.toLowerCase()} shown`;
 
+  // Card 2: games
+  document.getElementById("statGames").textContent = gamesCount;
+  document.getElementById("subGames").textContent  = `${mode === "trios" ? "fwd lines" : mode === "d-pairs" ? "def pairs" : "skater pairs"} mode`;
+
+  // Card 3: Best GD/60 from filtered rows
   const sorted_gd = [...rows].sort((a,b) => b.gd_per_60 - a.gd_per_60);
-  const sorted_cf = [...rows].sort((a,b) => b.cf_pct    - a.cf_pct);
+  if (sorted_gd.length) {
+    const best = sorted_gd[0];
+    document.getElementById("statBestGD").textContent = (best.gd_per_60 >= 0 ? "+" : "") + best.gd_per_60;
+    document.getElementById("subBestGD").textContent  = best.names?.[0]?.split(" ").pop() + " & " + best.names?.[1]?.split(" ").pop() || "";
+  } else {
+    document.getElementById("statBestGD").textContent = "—";
+    document.getElementById("subBestGD").textContent  = "";
+  }
 
-  document.getElementById("statBestGD").textContent =
-    sorted_gd.length ? `+${sorted_gd[0].gd_per_60}` : "—";
-  document.getElementById("statBestCF").textContent =
-    sorted_cf.length ? `${sorted_cf[0].cf_pct}%` : "—";
+  // Card 4: Best CF% from filtered rows
+  const sorted_cf = [...rows].sort((a,b) => b.cf_pct - a.cf_pct);
+  if (sorted_cf.length) {
+    const best = sorted_cf[0];
+    document.getElementById("statBestCF").textContent = best.cf_pct + "%";
+    document.getElementById("subBestCF").textContent  = best.names?.[0]?.split(" ").pop() + " & " + best.names?.[1]?.split(" ").pop() || "";
+  } else {
+    document.getElementById("statBestCF").textContent = "—";
+    document.getElementById("subBestCF").textContent  = "";
+  }
 
-  const top20 = sorted_gd.slice(0,20);
+  // Card 5: Avg TOI of top 20 by GD/60 (filtered)
+  document.getElementById("labelAvgTOI").textContent = ml.avgLabel;
+  const top20 = sorted_gd.slice(0, 20);
   const avgToi = top20.length
     ? (top20.reduce((s,r) => s + r.toi_min, 0) / top20.length).toFixed(1)
     : "—";
   document.getElementById("statAvgTOI").textContent = avgToi;
+  document.getElementById("subAvgTOI").textContent  = top20.length ? `min` : "";
 }
 
 // ── Main analysis loop ─────────────────────────────────────────────────────

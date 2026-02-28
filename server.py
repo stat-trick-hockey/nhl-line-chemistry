@@ -154,24 +154,152 @@ def process_game(game_id):
             if pid:
                 game_players[str(pid)] = {"name": f"{first} {last}".strip(), "pos": pos}
 
-        pairs      = {}
-        toi_buckets = {}
+        from itertools import combinations as _combos
 
+        pairs = {}
+
+        # ── Helper: get position for a player ──────────────────────────────
+        def get_pos(pid):
+            return game_players.get(str(pid), {}).get("pos", "")
+
+        # ── STEP 1: Extract 5v5 time windows from PBP ───────────────────────
+        # Build a list of (start_sec, end_sec) intervals where the game was 5v5.
+        # We do this by walking the plays in order and tracking situationCode changes.
+        five_v_five_windows = []
+        fvf_start = None
+        last_game_sec = 0
+
+        sorted_plays = sorted(
+            pbp.get("plays", []),
+            key=lambda p: (
+                p.get("periodDescriptor", {}).get("number", 1),
+                mmss_to_sec(p.get("timeInPeriod", "0:00"))
+            )
+        )
+
+        for play in sorted_plays:
+            period   = play.get("periodDescriptor", {}).get("number", 1)
+            if period > 3:   # ignore OT for 5v5 purposes
+                break
+            t        = period_offset(period) + mmss_to_sec(play.get("timeInPeriod", "0:00"))
+            sit_code = play.get("situationCode", "")
+            is_fvf   = (sit_code == "1551")
+
+            if is_fvf and fvf_start is None:
+                fvf_start = t
+            elif not is_fvf and fvf_start is not None:
+                if t > fvf_start:
+                    five_v_five_windows.append((fvf_start, t))
+                fvf_start = None
+            last_game_sec = t
+
+        # Close any open window at end of regulation
+        if fvf_start is not None:
+            five_v_five_windows.append((fvf_start, last_game_sec))
+
+        # ── STEP 2: Clip shift intervals to 5v5 windows only ─────────────────
+        # For each player, compute their shifts clipped to 5v5 time only.
+        def clip_to_5v5(shift_list):
+            """Return shift list clipped to 5v5 windows."""
+            clipped = []
+            for (ss, se) in shift_list:
+                for (ws, we) in five_v_five_windows:
+                    lo = max(ss, ws)
+                    hi = min(se, we)
+                    if hi > lo:
+                        clipped.append((lo, hi))
+            return clipped
+
+        # Group shifts by team, clipped to 5v5
+        # Each player's shifts already carry their teamId per shift entry.
+        team_shifts = {home_id: {}, away_id: {}}
+        for pid, shift_list in intervals.items():
+            # Group this player's raw shifts by team
+            by_team = {home_id: [], away_id: []}
+            for sh in shift_list:
+                tid = sh["tid"]
+                if tid in by_team:
+                    by_team[tid].append((sh["start"], sh["end"]))
+            # Clip each team's shifts to 5v5 windows and store
+            for tid, raw in by_team.items():
+                if raw:
+                    clipped = clip_to_5v5(raw)
+                    if clipped:
+                        team_shifts[tid][pid] = clipped
+
+        # Filter to eligible players per team based on mode
+        def eligible_players(tid):
+            result = []
+            for pid in team_shifts.get(tid, {}):
+                pos = get_pos(pid)
+                if mode == "trios":
+                    if pos in ("C", "L", "R", "F", "LW", "RW"):
+                        result.append(pid)
+                elif mode == "d-pairs":
+                    if pos == "D":
+                        result.append(pid)
+                else:
+                    if pos != "G" and pos != "":
+                        result.append(pid)
+            return result
+
+        def combo_toi_seconds(combo, tid):
+            """
+            Compute seconds where ALL players in combo are on ice simultaneously,
+            within 5v5 time only (already clipped in team_shifts).
+            """
+            current = list(team_shifts[tid].get(combo[0], []))
+            for pid in combo[1:]:
+                nxt = team_shifts[tid].get(pid, [])
+                merged = []
+                for (s1, e1) in current:
+                    for (s2, e2) in nxt:
+                        lo, hi = max(s1, s2), min(e1, e2)
+                        if hi > lo:
+                            merged.append((lo, hi))
+                current = merged
+                if not current:
+                    return 0
+            return sum(e - s for s, e in current)
+
+        # ── STEP 3: Build combo records with exact 5v5 TOI ───────────────────
+        for tid in (home_id, away_id):
+            elig = eligible_players(tid)
+            if len(elig) < combo_size:
+                continue
+            for combo in _combos(elig, combo_size):
+                toi_sec = combo_toi_seconds(combo, tid)
+                if toi_sec < 1:
+                    continue
+                key = "_".join(str(p) for p in sorted(combo))
+                if key not in pairs:
+                    pairs[key] = {
+                        "players": [str(p) for p in sorted(combo)],
+                        "p1": str(sorted(combo)[0]),
+                        "p2": str(sorted(combo)[1]),
+                        "teamId": tid,
+                        "toi": toi_sec,
+                        "gf": 0, "ga": 0,
+                        "sf": 0, "sa": 0,
+                        "ff": 0, "fa": 0,
+                        "cf": 0, "ca": 0,
+                    }
+
+        # ── STEP 4: Count events via PBP (5v5 filter already in is_5v5 check) ──
         for play in pbp.get("plays", []):
             if not is_5v5(play.get("situationCode")):
                 continue
 
-            period    = play.get("periodDescriptor", {}).get("number", 1)
-            time_str  = play.get("timeInPeriod", "0:00")
-            game_sec  = period_offset(period) + mmss_to_sec(time_str)
-            min_buck  = mmss_to_sec(time_str) // 60
-            ev_type   = play.get("typeDescKey", "")
-            ev_team   = play.get("details", {}).get("eventOwnerTeamId")
+            period   = play.get("periodDescriptor", {}).get("number", 1)
+            time_str = play.get("timeInPeriod", "0:00")
+            game_sec = period_offset(period) + mmss_to_sec(time_str)
+            ev_type  = play.get("typeDescKey", "")
+            ev_team  = play.get("details", {}).get("eventOwnerTeamId")
 
-            # Resolve on-ice
+            # Resolve on-ice at this moment
             home_on, away_on = [], []
-            for pid, shifts in intervals.items():
-                for sh in shifts:
+            for pid, shift_list in intervals.items():
+                for sh in shift_list:
                     if sh["start"] <= game_sec < sh["end"]:
                         if sh["tid"] == home_id:
                             home_on.append(pid)
@@ -183,60 +311,37 @@ def process_game(game_id):
                 (home_on, away_id, home_id),
                 (away_on, home_id, away_id),
             ]:
-                # Always exclude goalies
-                def get_pos(pid):
-                    return game_players.get(str(pid), {}).get("pos", "")
-
                 if mode == "trios":
-                    # Forwards only: C, L, R, F
-                    eligible = sorted(p for p in team_ids if get_pos(p) in ("C", "L", "R", "F", "LW", "RW"))
+                    elig = sorted(p for p in team_ids if get_pos(p) in ("C", "L", "R", "F", "LW", "RW"))
                 elif mode == "d-pairs":
-                    # Defensemen only
-                    eligible = sorted(p for p in team_ids if get_pos(p) == "D")
+                    elig = sorted(p for p in team_ids if get_pos(p) == "D")
                 else:
-                    # All skaters, exclude goalies
-                    eligible = sorted(p for p in team_ids if get_pos(p) != "G" and get_pos(p) != "")
+                    elig = sorted(p for p in team_ids if get_pos(p) != "G" and get_pos(p) != "")
 
-                if len(eligible) < combo_size:
+                if len(elig) < combo_size:
                     continue
 
-                from itertools import combinations as _combos
-                for combo in _combos(eligible, combo_size):
-                    key    = "_".join(str(p) for p in combo)
+                for combo in _combos(elig, combo_size):
+                    key    = "_".join(str(p) for p in sorted(combo))
                     is_for = ev_team == team_id
                     is_agn = ev_team == opp_id
 
                     if key not in pairs:
-                        pairs[key] = {
-                            "players": [str(p) for p in combo],
-                            "p1": str(combo[0]), "p2": str(combo[1]),
-                            "teamId": team_id,
-                            "toi": 0,
-                            "gf": 0, "ga": 0,
-                            "sf": 0, "sa": 0,
-                            "ff": 0, "fa": 0,
-                            "cf": 0, "ca": 0,
-                        }
-                        toi_buckets[key] = set()
-
-                    bucket = f"{period}_{min_buck}"
-                    if bucket not in toi_buckets[key]:
-                        toi_buckets[key].add(bucket)
-                        pairs[key]["toi"] += 60
+                        continue  # skip combos with no TOI (shouldn't happen)
 
                     s = pairs[key]
                     if ev_type == "goal":
                         if is_for: s["gf"] += 1
                         if is_agn: s["ga"] += 1
                     elif ev_type == "shot-on-goal":
-                        if is_for: s["sf"] += 1; s["ff"] += 1; s["cf"] += 1
-                        if is_agn: s["sa"] += 1; s["fa"] += 1; s["ca"] += 1
+                        if is_for:  s["sf"] += 1; s["ff"] += 1; s["cf"] += 1
+                        if is_agn:  s["sa"] += 1; s["fa"] += 1; s["ca"] += 1
                     elif ev_type == "missed-shot":
-                        if is_for: s["ff"] += 1; s["cf"] += 1
-                        if is_agn: s["fa"] += 1; s["ca"] += 1
+                        if is_for:  s["ff"] += 1; s["cf"] += 1
+                        if is_agn:  s["fa"] += 1; s["ca"] += 1
                     elif ev_type == "blocked-shot":
-                        if is_for: s["cf"] += 1
-                        if is_agn: s["ca"] += 1
+                        if is_for:  s["cf"] += 1
+                        if is_agn:  s["ca"] += 1
 
         print(f"[game {game_id}] intervals: {len(intervals)} players, plays: {len(pbp.get('plays', []))}, pairs: {len(pairs)}")
         return jsonify({

@@ -154,6 +154,30 @@ def process_game(game_id):
             if pid:
                 game_players[str(pid)] = {"name": f"{first} {last}".strip(), "pos": pos}
 
+        # Enrich game_players with roster data for any players missing positions
+        # This catches players traded mid-season who may not appear in rosterSpots
+        home_abbr = pbp.get("homeTeam", {}).get("abbrev", "")
+        away_abbr = pbp.get("awayTeam", {}).get("abbrev", "")
+        for abbr in (home_abbr, away_abbr):
+            if not abbr:
+                continue
+            try:
+                rd = web_get(f"/roster/{abbr}/current")
+                for group in ("forwards", "defensemen", "goalies"):
+                    for p in rd.get(group, []):
+                        pid_str = str(p.get("id", ""))
+                        if pid_str and pid_str not in game_players:
+                            first = p.get("firstName", {}).get("default", "")
+                            last  = p.get("lastName",  {}).get("default", "")
+                            game_players[pid_str] = {
+                                "name": f"{first} {last}".strip(),
+                                "pos":  p.get("positionCode", ""),
+                            }
+                        elif pid_str and not game_players[pid_str].get("pos"):
+                            game_players[pid_str]["pos"] = p.get("positionCode", "")
+            except Exception:
+                pass  # roster fetch failing shouldn't break the game
+
         from itertools import combinations as _combos
 
         pairs = {}
@@ -233,13 +257,18 @@ def process_game(game_id):
             for pid in team_shifts.get(tid, {}):
                 pos = get_pos(pid)
                 if mode == "trios":
-                    if pos in ("C", "L", "R", "F", "LW", "RW"):
+                    # Include if forward, OR if position unknown (exclude only D and G)
+                    if pos in ("C", "L", "R", "F", "LW", "RW") or (pos not in ("D", "G") and pos != ""):
+                        result.append(pid)
+                    elif pos == "":
+                        # Unknown position - include as forward candidate
+                        # (goalies always have shifts marked, D is usually known)
                         result.append(pid)
                 elif mode == "d-pairs":
                     if pos == "D":
                         result.append(pid)
                 else:
-                    if pos != "G" and pos != "":
+                    if pos != "G":
                         result.append(pid)
             return result
 
@@ -312,11 +341,11 @@ def process_game(game_id):
                 (away_on, home_id, away_id),
             ]:
                 if mode == "trios":
-                    elig = sorted(p for p in team_ids if get_pos(p) in ("C", "L", "R", "F", "LW", "RW"))
+                    elig = sorted(p for p in team_ids if get_pos(p) in ("C", "L", "R", "F", "LW", "RW") or get_pos(p) not in ("D", "G"))
                 elif mode == "d-pairs":
                     elig = sorted(p for p in team_ids if get_pos(p) == "D")
                 else:
-                    elig = sorted(p for p in team_ids if get_pos(p) != "G" and get_pos(p) != "")
+                    elig = sorted(p for p in team_ids if get_pos(p) != "G")
 
                 if len(elig) < combo_size:
                     continue
